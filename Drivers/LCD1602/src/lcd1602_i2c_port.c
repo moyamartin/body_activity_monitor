@@ -4,7 +4,7 @@
 
 #include "API_uart.h"
 #include "lcd1602.h"
-#include "lcd1602_i2c_port.h"
+#include "API_i2c.h"
 
 #define BYTE_SIZE sizeof(uint8_t)
 
@@ -32,7 +32,7 @@ lcd1602_error_t lcd1602_send_data(const lcd1602_data_t *lcd_data, bool read, boo
     if(lcd_data == NULL || lcd_data->port == NULL) {
         return -1;
     }
-    lcd1602_i2c_port_t *port = (lcd1602_i2c_port_t *)lcd_data->port;
+    i2c_port_t *port = (i2c_port_t *)lcd_data->port;
     if(port->i2c_handler == NULL) {
         return -1;
     }
@@ -72,7 +72,7 @@ lcd1602_error_t lcd1602_read_nibble(const lcd1602_data_t *lcd_data, bool is_data
     if(lcd_data == NULL || lcd_data->port == NULL || nibble == NULL) {
         return INVAL;
     }
-    lcd1602_i2c_port_t *port = (lcd1602_i2c_port_t *)lcd_data->port;
+    i2c_port_t *port = (i2c_port_t *)lcd_data->port;
     if(port->i2c_handler == NULL) {
         return INVAL;
     }

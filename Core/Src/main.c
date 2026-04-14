@@ -22,8 +22,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <API_uart.h>
-#include "lcd1602_i2c_port.h"
-#include "lcd1602.h"
+#include <API_i2c.h>
+#include <lcd1602.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,7 +50,7 @@ TIM_HandleTypeDef htim1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-lcd1602_i2c_port_t lcd_port = {
+i2c_port_t lcd_port = {
     .i2c_handler = &hi2c1,
     .address = LCD1602_I2C_ADDRESS,
 };
