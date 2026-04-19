@@ -45,6 +45,10 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
+    Drivers/BMA400/src/bma400.c
+    Drivers/BMA400/src/bma400_delay.c
+    Drivers/BMA400/src/bma400_i2c_port.c
+    Drivers/BMA400/src/bma400_interrupt.c
     Drivers/LCD1602/src/lcd1602.c
     Drivers/LCD1602/src/lcd1602_i2c_port.c
     Drivers/LCD1602/src/lcd1602_delay.c
@@ -54,6 +58,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
+    Drivers/BMA400/inc
     Drivers/LCD1602/inc
     Drivers/API/Inc
     Drivers/Utils/inc
