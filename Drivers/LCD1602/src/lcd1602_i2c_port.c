@@ -45,15 +45,15 @@ lcd1602_error_t lcd1602_send_data(const lcd1602_data_t *lcd_data, bool read, boo
 
     HAL_StatusTypeDef status = HAL_I2C_Master_Transmit(i2c_handler, port->address, &tx_buffer, BYTE_SIZE, HAL_MAX_DELAY);
     if(status != HAL_OK) {
-        return WRITE_ERROR;
+        return LCD1602_WRITE_ERROR;
     }
     // EN bit should be held high for at least 450ns, so we can use a short delay here
     lcd1602_delay_us(1);
     tx_buffer &= ~BIT(2); // Clear the EN bit after transmission
     if(status != HAL_OK) {
-        return WRITE_ERROR;
+        return LCD1602_WRITE_ERROR;
     }
-    return OK;
+    return LCD1602_OK;
 }
 
 /**
@@ -70,11 +70,11 @@ lcd1602_error_t lcd1602_send_data(const lcd1602_data_t *lcd_data, bool read, boo
  */
 lcd1602_error_t lcd1602_read_nibble(const lcd1602_data_t *lcd_data, bool is_data, uint8_t *nibble) {
     if(lcd_data == NULL || lcd_data->port == NULL || nibble == NULL) {
-        return INVAL;
+        return LCD1602_INVAL;
     }
     i2c_port_t *port = (i2c_port_t *)lcd_data->port;
     if(port->i2c_handler == NULL) {
-        return INVAL;
+        return LCD1602_INVAL;
     }
     I2C_HandleTypeDef *i2c_handler = (I2C_HandleTypeDef *)port->i2c_handler;
 
@@ -87,27 +87,27 @@ lcd1602_error_t lcd1602_read_nibble(const lcd1602_data_t *lcd_data, bool is_data
     // Setup phase: EN=0
     uint8_t byte = ctrl & ~BIT(2);
     if(HAL_I2C_Master_Transmit(i2c_handler, port->address, &byte, BYTE_SIZE, HAL_MAX_DELAY) != HAL_OK) {
-        return WRITE_ERROR;
+        return LCD1602_WRITE_ERROR;
     }
 
     // Strobe high: EN=1 — LCD drives D7-D4 onto the bus
     byte = ctrl | BIT(2);
     if(HAL_I2C_Master_Transmit(i2c_handler, port->address, &byte, BYTE_SIZE, HAL_MAX_DELAY) != HAL_OK) {
-        return WRITE_ERROR;
+        return LCD1602_WRITE_ERROR;
     }
 
     // Read while EN is still high
     uint8_t data;
     if(HAL_I2C_Master_Receive(i2c_handler, port->address, &data, BYTE_SIZE, HAL_MAX_DELAY) != HAL_OK) {
-        return READ_ERROR;
+        return LCD1602_READ_ERROR;
     }
     *nibble = data & 0xF0; // only the upper nibble carries valid LCD data
 
     // Strobe low: EN=0 — latch the data
     byte = ctrl & ~BIT(2);
     if(HAL_I2C_Master_Transmit(i2c_handler, port->address, &byte, BYTE_SIZE, HAL_MAX_DELAY) != HAL_OK) {
-        return WRITE_ERROR;
+        return LCD1602_WRITE_ERROR;
     }
 
-    return OK;
+    return LCD1602_OK;
 }

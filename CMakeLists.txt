@@ -53,6 +53,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Drivers/LCD1602/src/lcd1602_i2c_port.c
     Drivers/LCD1602/src/lcd1602_delay.c
     Drivers/API/Src/API_uart.c
+    Core/Src/activity_monitor.c
 )
 
 # Add include paths

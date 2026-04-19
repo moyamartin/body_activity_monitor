@@ -21,9 +21,10 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <API_uart.h>
+#include <stdio.h>
+
 #include <API_i2c.h>
-#include <lcd1602.h>
+#include "activity_monitor.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -33,7 +34,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define LCD1602_I2C_ADDRESS (0x27 << 1) // Shifted left for HAL functions
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -50,20 +50,6 @@ TIM_HandleTypeDef htim1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-i2c_port_t lcd_port = {
-    .i2c_handler = &hi2c1,
-    .address = LCD1602_I2C_ADDRESS,
-};
-
-lcd1602_data_t lcd = {
-    .port = &lcd_port,
-    .backlight_on = true,
-    .disp_func = LCD1602_FUNCTION_SET_2LINE,
-    .disp_ctrl = LCD1602_DISPLAY_ON,
-    .disp_mode = LCD1602_ENTRY_MODE_INCREMENT,
-    .num_lines = 2,
-    .row_offsets = {0x00, 0x40, 0x00, 0x00},
-};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -116,23 +102,14 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
-  if(false == uartInit()) {
-    return -1;
-  }
-  if(lcd1602_init(&lcd) != OK) {
-      // Handle initialization error (e.g., log it, retry, etc.)
-      uartSendString("LCD initialization failed!\r\n");
-      return -1;
-  }
-  uartSendString("LCD initialized!\r\n");
-  lcd1602_set_cursor(&lcd, 0, 0);
-  lcd1602_write_string(&lcd, "Hello, World!");
+  activity_monitor_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    activity_monitor_update();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

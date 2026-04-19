@@ -59,11 +59,12 @@ typedef struct {
 } lcd1602_data_t;
 
 typedef enum {
-    OK = 0,
-    INVAL,
-    WRITE_ERROR,
-    READ_ERROR,
-    BUSY,
+    LCD1602_OK = 0,
+    LCD1602_INVAL,
+    LCD1602_WRITE_ERROR,
+    LCD1602_READ_ERROR,
+    LCD1602_BUSY,
+    LCD1602_FMT_FAILED,
 } lcd1602_error_t;
 
 /**
@@ -174,6 +175,16 @@ lcd1602_error_t lcd1602_write_char(lcd1602_data_t *lcd_data, char c);
  * @return 0 on success, -1 on failure (e.g., invalid pointer
  */
 lcd1602_error_t lcd1602_write_string(lcd1602_data_t *lcd_data, const char *str);
+
+/**
+ * @brief Write a null-terminated, printf-style formatted  string to the LCD1602 display starting at the current cursor position.
+ * @param[in] lcd_data Pointer to the lcd1602_data_t structure containing display settings
+ * @param[in] fmt: format string
+ * @param[in] ...: arguments matching the format specifiers
+ * @return 0 on success, -1 on failure (e.g., invalid pointer
+ */
+lcd1602_error_t lcd1602_write_fmt_string(lcd1602_data_t *lcd_data, const char *fmt, ...)
+        __attribute__((format(printf, 2, 3)));
 
 /**
  * @brief Check if the LCD1602 display is busy processing a command or data.

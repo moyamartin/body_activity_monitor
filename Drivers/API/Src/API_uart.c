@@ -1,5 +1,6 @@
-#include <string.h>
+#include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "API_uart.h"
 #include "stm32f4xx_hal.h"
@@ -9,7 +10,7 @@ static UART_HandleTypeDef huart;
 static char tx_buffer[MAX_TX_SIZE];
 
 
-bool_t uartInit()
+uart_error_t uart_init()
 {
   huart.Instance = USART2;
   huart.Init.BaudRate = 115200;
@@ -20,7 +21,7 @@ bool_t uartInit()
   huart.Init.HwFlowCtl = UART_HWCONTROL_NONE;
   huart.Init.OverSampling = UART_OVERSAMPLING_16;
   if(HAL_UART_Init(&huart) != HAL_OK) {
-	  return false;
+	  return UART_INIT_FAILED;
   }
   snprintf(tx_buffer,
 		   sizeof(tx_buffer)/sizeof(tx_buffer[0]),
@@ -28,40 +29,67 @@ bool_t uartInit()
 		   huart.Init.BaudRate, (huart.Init.WordLength == 0) ? 8 : 9,
 		   (huart.Init.StopBits == 0) ? 1 : 2); // (huart.Init.Parity == UART_PARITY_NONE) "none" ? "even", huart.Init.Mode,
 		   //huart.Init.HwFlowCtl, huart.Init.OverSampling);
-  uartSendString(tx_buffer);
-  return true;
+  uart_send_string(tx_buffer);
+  return UART_OK;
 }
 
-void uartSendString(char *pstring)
+uart_error_t uart_send_string(char *pstring)
 {
 	if(pstring == NULL) {
-		return;
+		return UART_INVAL;
 	}
 	size_t size = strlen(pstring);
 	if(size > MAX_TX_SIZE || size < MIN_TX_SIZE) {
-		return;
+		return UART_INVAL;
 	}
-	HAL_UART_Transmit(&huart, (uint8_t*)pstring, (uint16_t)size, HAL_MAX_DELAY);
+	if(HAL_UART_Transmit(&huart, (uint8_t*)pstring, (uint16_t)size, HAL_MAX_DELAY) != HAL_OK) {
+		return UART_TRANSMIT_ERROR;
+	}
+	return UART_OK;
 }
 
-void uartSendStringSize(uint8_t *pstring, uint16_t size)
+uart_error_t uart_send_string_size(char *pstring, uint16_t size)
 {
 	if(pstring == NULL) {
-		return;
+		return UART_INVAL;
 	}
 	if(size > MAX_TX_SIZE || size < MIN_TX_SIZE) {
-		return;
+		return UART_INVAL;
 	}
-	HAL_UART_Transmit(&huart, pstring, size, HAL_MAX_DELAY);
+	if(HAL_UART_Transmit(&huart, (uint8_t*) pstring, size, HAL_MAX_DELAY) != HAL_OK) {
+		return UART_TRANSMIT_ERROR;
+	}
+	return UART_OK;
 }
 
-bool uartReceiveStringSize(uint8_t *pstring, uint16_t size)
+uart_error_t uart_send_formatted_string(const char *fmt, ...)
+{
+	if(fmt == NULL) {
+		return UART_INVAL;
+	}
+	va_list args;
+	va_start(args, fmt);
+	int written = vsnprintf(tx_buffer, sizeof(tx_buffer), fmt, args);
+	va_end(args);
+	if(written <= 0) {
+		return UART_INVAL;
+	}
+	size_t size = ((size_t)written >= sizeof(tx_buffer))
+					? sizeof(tx_buffer) - 1
+					: (size_t)written;
+	return uart_send_string_size(tx_buffer, size);
+}
+
+uart_error_t uart_receive_string_size(char *pstring, uint16_t size)
 {
 	if(pstring == NULL) {
-		return false;
+		return UART_INVAL;
 	}
 	if(size > MAX_RX_SIZE || size < MIN_RX_SIZE) {
-		return false;
+		return UART_INVAL;
 	}
-	return HAL_UART_Receive(&huart, pstring, size, HAL_MAX_DELAY) != HAL_OK;
+	if(HAL_UART_Receive(&huart, (uint8_t *)pstring, size, HAL_MAX_DELAY) != HAL_OK) {
+		return UART_RECEIVE_ERROR;
+	}
+	return UART_OK;
 }
