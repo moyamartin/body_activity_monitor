@@ -19,7 +19,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Set the project name
-set(CMAKE_PROJECT_NAME projecto_pcse)
+set(CMAKE_PROJECT_NAME body_activity_monitor)
 
 # Enable compile command to ease indexing with e.g. clangd
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
@@ -45,15 +45,17 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
+    Core/Src/activity_monitor.c
+    Drivers/API/Src/API_debounce.c
+    Drivers/API/Src/API_delay.c
+    Drivers/API/Src/API_uart.c
     Drivers/BMA400/src/bma400.c
     Drivers/BMA400/src/bma400_delay.c
     Drivers/BMA400/src/bma400_i2c_port.c
     Drivers/BMA400/src/bma400_interrupt.c
     Drivers/LCD1602/src/lcd1602.c
-    Drivers/LCD1602/src/lcd1602_i2c_port.c
     Drivers/LCD1602/src/lcd1602_delay.c
-    Drivers/API/Src/API_uart.c
-    Core/Src/activity_monitor.c
+    Drivers/LCD1602/src/lcd1602_i2c_port.c
 )
 
 # Add include paths

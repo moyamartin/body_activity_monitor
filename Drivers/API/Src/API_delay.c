@@ -1,14 +1,14 @@
 #include "API_delay.h"
 #include "stm32f4xx_hal.h"
 
-void delayInit(delay_t *delay, tick_t duration) {
+void delay_init(delay_t *delay, tick_t duration) {
     if(delay == NULL ) { return; }
     delay->startTime = 0;
     delay->duration = duration;
     delay->running = false;
 }
 
-bool_t delayRead(delay_t *delay) {
+bool_t delay_read(delay_t *delay) {
   if(delay == NULL ) { return false; }
   if(delay->running) {
     /// Check if the delay has elapsed
@@ -24,12 +24,16 @@ bool_t delayRead(delay_t *delay) {
   return false;
 }
 
-void delayWrite(delay_t *delay, tick_t duration) {
+void delay_stop(delay_t *delay) {
+  delay->running = false;
+}
+
+void delay_write(delay_t *delay, tick_t duration) {
   if(delay == NULL ) { return; }
   delay->duration = duration;
 }
 
-bool_t delayIsRunning(const delay_t *delay) {
+bool_t delay_is_running(const delay_t *delay) {
 	if(delay == NULL) { return false; }
 	return delay->running;
 }

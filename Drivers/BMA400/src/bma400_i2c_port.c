@@ -26,12 +26,12 @@ bma400_error_t bma400_send_data(const bma400_dev_t *chip, uint8_t reg_addr, size
     }
 
     I2C_HandleTypeDef *i2c_handler = (I2C_HandleTypeDef *)port->i2c_handler;
-    size_t i = 0;
     /**
-     * BMA400 I2C does not autoincrements reg_addr, so we need to do that manually
+     * BMA400 I2C does not autoincrement reg_addr on writes, so walk through
+     * registers one byte at a time.
      */
-    for(i = 0; i < size; i++) {
-        HAL_StatusTypeDef status = HAL_I2C_Mem_Write(i2c_handler, port->address, reg_addr + i, I2C_MEMADD_SIZE_8BIT, payload + i, size, HAL_MAX_DELAY);
+    for(size_t i = 0; i < size; i++) {
+        HAL_StatusTypeDef status = HAL_I2C_Mem_Write(i2c_handler, port->address, reg_addr + i, I2C_MEMADD_SIZE_8BIT, payload + i, 1, HAL_MAX_DELAY);
         if(status != HAL_OK) {
             return BMA400_WRITE_ERROR;
         }

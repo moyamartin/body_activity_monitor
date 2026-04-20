@@ -69,28 +69,9 @@
 #define BMA400_ORIENTCH_CONFIG7_REG     0x3C
 #define BMA400_ORIENTCH_CONFIG8_REG     0x3D
 #define BMA400_ORIENTCH_CONFIG9_REG     0x3E
-#define BMA400_GEN1INT_CONFIG0_REG      0x3F
-#define BMA400_GEN1INT_CONFIG1_REG      0x40
-#define BMA400_GEN1INT_CONFIG2_REG      0x41
-#define BMA400_GEN1INT_CONFIG3_REG      0x42
-#define BMA400_GEN1INT_CONFIG31_REG     0x43
-#define BMA400_GEN1INT_CONFIG4_REG      0x44
-#define BMA400_GEN1INT_CONFIG5_REG      0x45
-#define BMA400_GEN1INT_CONFIG6_REG      0x46
-#define BMA400_GEN1INT_CONFIG7_REG      0x47
-#define BMA400_GEN1INT_CONFIG8_REG      0x48
-#define BMA400_GEN1INT_CONFIG9_REG      0x49
-#define BMA400_GEN2INT_CONFIG0_REG      0x4A
-#define BMA400_GEN2INT_CONFIG1_REG      0x4B
-#define BMA400_GEN2INT_CONFIG2_REG      0x4C
-#define BMA400_GEN2INT_CONFIG3_REG      0x4D
-#define BMA400_GEN2INT_CONFIG31_REG     0x4E
-#define BMA400_GEN2INT_CONFIG4_REG      0x4F
-#define BMA400_GEN2INT_CONFIG5_REG      0x50
-#define BMA400_GEN2INT_CONFIG6_REG      0x51
-#define BMA400_GEN2INT_CONFIG7_REG      0x52
-#define BMA400_GEN2INT_CONFIG8_REG      0x53
-#define BMA400_GEN2INT_CONFIG9_REG      0x54
+#define BMA400_GEN1INT_CONFIG_REG       0x3F
+#define BMA400_GEN2INT_CONFIG_REG       0x4A
+#define BMA400_GENxINT_CONFIG_SIZE      11
 #define BMA400_ACTH_CONFIG0_REG         0x55
 #define BMA400_ACTH_CONFIG1_REG         0x56
 #define BMA400_TAP_CONFIG_REG           0x57
@@ -129,24 +110,21 @@
 #define BMA400_POR_DETECTED             BIT(0) ///< Power-on or soft reset detected (clear on read)
 
 /* ------------------------------------------------------------------------- */
-/* INT_STAT0 (0x0E) flags                                                    */
+/* INT_STAT(1|0) (0x0E) flags                                                    */
 /* ------------------------------------------------------------------------- */
-#define BMA400_DRDY_INT_STAT            BIT(7) ///< Data ready interrupt status
-#define BMA400_FWM_INT_STAT             BIT(6) ///< FIFO watermark interrupt status
-#define BMA400_FFULL_INT_STAT           BIT(5) ///< FIFO full interrupt status
-#define BMA400_IENG_OVERRUN_STAT        BIT(4) ///< Interrupt engine overrun status
-#define BMA400_GEN2_INT_STAT            BIT(3) ///< Generic interrupt 2 status
-#define BMA400_GEN1_INT_STAT            BIT(2) ///< Generic interrupt 1 status
-#define BMA400_ORIENTCH_INT_STAT        BIT(1) ///< Orientation change interrupt status
-#define BMA400_WKUP_INT_STAT            BIT(0) ///< Wake-up interrupt status
+#define BMA400_INT_STAT1_IENG_OVERRUN   BIT(12)         ///< Interrupt engine overrun status
+#define BMA400_D_TAP_INT_STAT           BIT(11)         ///< Double tap interrupt status
+#define BMA400_S_TAP_INT_STAT           BIT(10)         ///< Single tap interrupt status
+#define BMA400_STEP_INT_STAT            GENMASK(9, 8)   ///< Step detector status: 0 none, 1 step, 2 double step
+#define BMA400_DRDY_INT_STAT            BIT(7)          ///< Data ready interrupt status
+#define BMA400_FWM_INT_STAT             BIT(6)          ///< FIFO watermark interrupt status
+#define BMA400_FFULL_INT_STAT           BIT(5)          ///< FIFO full interrupt status
+#define BMA400_IENG_OVERRUN_STAT        BIT(4)          ///< Interrupt engine overrun status
+#define BMA400_GEN2_INT_STAT            BIT(3)          ///< Generic interrupt 2 status
+#define BMA400_GEN1_INT_STAT            BIT(2)          ///< Generic interrupt 1 status
+#define BMA400_ORIENTCH_INT_STAT        BIT(1)          ///< Orientation change interrupt status
+#define BMA400_WKUP_INT_STAT            BIT(0)          ///< Wake-up interrupt status
 
-/* ------------------------------------------------------------------------- */
-/* INT_STAT1 (0x0F) flags                                                    */
-/* ------------------------------------------------------------------------- */
-#define BMA400_INT_STAT1_IENG_OVERRUN   BIT(4)        ///< Interrupt engine overrun status
-#define BMA400_D_TAP_INT_STAT           BIT(3)        ///< Double tap interrupt status
-#define BMA400_S_TAP_INT_STAT           BIT(2)        ///< Single tap interrupt status
-#define BMA400_STEP_INT_STAT            GENMASK(1, 0) ///< Step detector status: 0 none, 1 step, 2 double step
 
 /* ------------------------------------------------------------------------- */
 /* INT_STAT2 (0x10) flags                                                    */
@@ -824,23 +802,6 @@ typedef struct {
     uint8_t conf;           ///< Non-zero enables the interrupt, zero disables it
 } bma400_int_enable_t;
 
-/* ------------------------------------------------------------------------- */
-/* Combined interrupt status masks (returned by bma400_get_interrupt_status) */
-/*                                                                           */
-/*   bit  7..0  -> raw INT_STAT0 byte                                        */
-/*   bit 15..8  -> raw INT_STAT1 byte                                        */
-/* ------------------------------------------------------------------------- */
-#define BMA400_ASSERTED_WAKEUP_INT          BMA400_WKUP_INT_STAT
-#define BMA400_ASSERTED_ORIENT_CH           BMA400_ORIENTCH_INT_STAT
-#define BMA400_ASSERTED_GEN1_INT            BMA400_GEN1_INT_STAT
-#define BMA400_ASSERTED_GEN2_INT            BMA400_GEN2_INT_STAT
-#define BMA400_ASSERTED_IENG_OVERRUN_INT    BMA400_IENG_OVERRUN_STAT
-#define BMA400_ASSERTED_FFULL_INT           BMA400_FFULL_INT_STAT
-#define BMA400_ASSERTED_FWM_INT             BMA400_FWM_INT_STAT
-#define BMA400_ASSERTED_DRDY_INT            BMA400_DRDY_INT_STAT
-#define BMA400_ASSERTED_STEP_INT            ((uint16_t)BMA400_STEP_INT_STAT << 8)
-#define BMA400_ASSERTED_S_TAP_INT           ((uint16_t)BMA400_S_TAP_INT_STAT << 8)
-#define BMA400_ASSERTED_D_TAP_INT           ((uint16_t)BMA400_D_TAP_INT_STAT << 8)
 
 /**
  * @brief BMA400 device descriptor

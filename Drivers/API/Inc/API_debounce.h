@@ -25,7 +25,7 @@ typedef enum {
  * BUTTON_UP and initializing the debounce delay timer.
  * It should be called once at the start of the program.
  */
-void debounceFSM_init();
+void debounce_init();
 
 /**
  * @brief update FSM according to inputs
@@ -35,7 +35,7 @@ void debounceFSM_init();
  * state and transitions to the next state based on the button's logic level and
  * the debounce delay.
  */
-void debounceFSM_update();
+void debounce_update();
 
 /**
  * @brief public function to get key value
@@ -44,6 +44,6 @@ void debounceFSM_update();
  * @note this function will return true only once per button press, it resets
  * the keyPressed variable after reading it
  */
-bool_t readKey();
+bool_t read_key();
 
 #endif /* API_DEBOUNCE_H_ */

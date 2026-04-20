@@ -23,8 +23,9 @@
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 
+#include <API_debounce.h>
 #include <API_i2c.h>
-#include "activity_monitor.h"
+#include <activity_monitor.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -102,6 +103,7 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
+  debounce_init();
   activity_monitor_init();
   /* USER CODE END 2 */
 
@@ -109,6 +111,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    debounce_update();
     activity_monitor_update();
     /* USER CODE END WHILE */
 

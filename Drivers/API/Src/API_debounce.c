@@ -10,14 +10,14 @@ static delay_t delayDebounce;
 static bool_t keyPressed;
 static bool_t isInitialized = false;
 
-void debounceFSM_init()
+void debounce_init()
 {
-	delayInit(&delayDebounce, ANTIBOUNCE_DELAY);
+	delay_init(&delayDebounce, ANTIBOUNCE_DELAY);
 	debounceFSM = BUTTON_UP;
 	isInitialized = true;
 }
 
-void debounceFSM_update()
+void debounce_update()
 {
 	if(isInitialized == false) { return; }
 	switch(debounceFSM) {
@@ -27,7 +27,7 @@ void debounceFSM_update()
 		}
 		break;
 	case BUTTON_FALLING:
-		if(delayRead(&delayDebounce) && HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET) {
+		if(delay_read(&delayDebounce) && HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET) {
 			debounceFSM = BUTTON_DOWN;
 			keyPressed = true;
 		}
@@ -38,7 +38,7 @@ void debounceFSM_update()
 		}
 		break;
 	case BUTTON_RISING:
-		if(delayRead(&delayDebounce) && HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_SET) {
+		if(delay_read(&delayDebounce) && HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_SET) {
 			debounceFSM = BUTTON_UP;
 		}
 		break;
@@ -48,7 +48,7 @@ void debounceFSM_update()
 	}
 }
 
-bool_t readKey() {
+bool_t read_key() {
 	if(isInitialized == false) { return false; }
 	bool_t temp_value = keyPressed;
 	keyPressed = false;

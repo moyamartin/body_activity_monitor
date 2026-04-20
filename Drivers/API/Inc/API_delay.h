@@ -32,7 +32,7 @@ typedef struct {
  * structure. To start the delay, you need to call the delayRead function after
  * initialization.
  */
-void delayInit(delay_t *delay, tick_t duration);
+void delay_init(delay_t *delay, tick_t duration);
 
 /**
  * @brief Checks if the specified delay has elapsed.
@@ -42,7 +42,7 @@ void delayInit(delay_t *delay, tick_t duration);
  * @note it starts the delay if it is not running, so you can use this function
  * to both start and check the delay.
  */
-bool_t delayRead(delay_t *delay);
+bool_t delay_read(delay_t *delay);
 
 
 /**
@@ -51,7 +51,7 @@ bool_t delayRead(delay_t *delay);
  * @param[in] delay pointer to the delay structure to be modified
  * @param[in] duration the new duration of the delay in ticks
  */
-void delayWrite(delay_t *delay, tick_t duration);
+void delay_write(delay_t *delay, tick_t duration);
 
 
 /**
@@ -60,6 +60,15 @@ void delayWrite(delay_t *delay, tick_t duration);
  * @param[in] delay pointer to the delay structure to be modified
  * @return true if delay is running, otherwise false
  */
-bool_t delayIsRunning(const delay_t *delay);
+bool_t delay_is_running(const delay_t *delay);
+
+/**
+ * @brief Stop the delay
+ *
+ * @param[in] delay pointer to the delay structure to be stopped
+ * @note this will only put running = false. Forcing to restart if delayRead is
+ * called
+ */
+void delay_stop(delay_t *delay);
 
 #endif /* API_DELAY_H_ */

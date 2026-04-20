@@ -214,6 +214,97 @@ static bma400_error_t get_accel_conf(bma400_dev_t *chip, bma400_acc_conf_t *cfg)
     return BMA400_OK;
 }
 
+/* Route generic interrupt 1 or 2 (selected by @p gen_map_bit) to INT1 / INT2. */
+static bma400_error_t map_gen_int_pin(bma400_dev_t *chip, uint8_t gen_map_bit, bma400_int_chan_t chan) {
+    uint8_t m1, m2;
+    bma400_error_t ret = bma400_read_data(chip, BMA400_ACC_INT1_MAP_REG, sizeof(uint8_t), &m1);
+    if(ret != BMA400_OK) {
+        return ret;
+    }
+    ret = bma400_read_data(chip, BMA400_ACC_INT2_MAP_REG, sizeof(uint8_t), &m2);
+    if(ret != BMA400_OK) {
+        return ret;
+    }
+    m1 &= ~gen_map_bit;
+    m2 &= ~gen_map_bit;
+    if(chan == BMA400_INT_CHANNEL_1 || chan == BMA400_MAP_BOTH_INT_PINS) {
+        m1 |= gen_map_bit;
+    }
+    if(chan == BMA400_INT_CHANNEL_2 || chan == BMA400_MAP_BOTH_INT_PINS) {
+        m2 |= gen_map_bit;
+    }
+    ret = bma400_send_data(chip, BMA400_ACC_INT1_MAP_REG, sizeof(uint8_t), &m1);
+    if(ret != BMA400_OK) {
+        return ret;
+    }
+    return bma400_send_data(chip, BMA400_ACC_INT2_MAP_REG, sizeof(uint8_t), &m2);
+}
+
+static bma400_error_t set_gen_int_conf(bma400_dev_t *chip, uint8_t base_reg, uint8_t map_bit,
+                                       const bma400_gen_int_conf_t *cfg) {
+    uint8_t regs[11];
+    regs[0] = (cfg->axes_sel & (BMA400_AXIS_X_EN | BMA400_AXIS_Y_EN | BMA400_AXIS_Z_EN))
+            | FIELD_PREP(BMA400_GEN_DATA_SRC, cfg->data_src)
+            | FIELD_PREP(BMA400_GEN_ACT_REF_UPDATE, (uint8_t)cfg->ref_update)
+            | FIELD_PREP(BMA400_GEN_ACT_HYST, (uint8_t)cfg->hysteresis);
+    regs[1] = FIELD_PREP(BMA400_GEN_CRITERION_SEL, cfg->criterion_sel)
+            | FIELD_PREP(BMA400_GEN_COMB_SEL, cfg->evaluate_axes);
+    regs[2] = cfg->gen_int_thres;
+    regs[3] = (uint8_t)((cfg->gen_int_dur >> 8) & 0xFF);
+    regs[4] = (uint8_t)(cfg->gen_int_dur & 0xFF);
+    regs[5] = (uint8_t)(cfg->int_thres_ref_x & 0xFF);
+    regs[6] = (uint8_t)((cfg->int_thres_ref_x >> 8) & 0x0F);
+    regs[7] = (uint8_t)(cfg->int_thres_ref_y & 0xFF);
+    regs[8] = (uint8_t)((cfg->int_thres_ref_y >> 8) & 0x0F);
+    regs[9] = (uint8_t)(cfg->int_thres_ref_z & 0xFF);
+    regs[10] = (uint8_t)((cfg->int_thres_ref_z >> 8) & 0x0F);
+    bma400_error_t ret = bma400_send_data(chip, base_reg, sizeof(regs), regs);
+    if(ret != BMA400_OK) {
+        return ret;
+    }
+    return map_gen_int_pin(chip, map_bit, cfg->int_chan);
+}
+
+static bma400_error_t get_gen_int_conf(bma400_dev_t *chip, uint8_t base_reg, uint8_t map_bit,
+                                       bma400_gen_int_conf_t *cfg) {
+    if(chip == NULL || cfg == NULL) {
+        return BMA400_INVAL;
+    }
+    uint8_t regs[BMA400_GENxINT_CONFIG_SIZE];
+    bma400_error_t ret = bma400_read_data(chip, base_reg, ARRAY_SIZE(regs), regs);
+    if(ret != BMA400_OK) {
+        return ret;
+    }
+    cfg->axes_sel      = regs[0] & (BMA400_AXIS_X_EN | BMA400_AXIS_Y_EN | BMA400_AXIS_Z_EN);
+    cfg->data_src      = FIELD_GET(BMA400_GEN_DATA_SRC, regs[0]);
+    cfg->ref_update    = (bma400_gen_act_ref_update_t)FIELD_GET(BMA400_GEN_ACT_REF_UPDATE, regs[0]);
+    cfg->hysteresis    = (bma400_act_hyst_conf_t)FIELD_GET(BMA400_GEN_ACT_HYST, regs[0]);
+    cfg->criterion_sel = FIELD_GET(BMA400_GEN_CRITERION_SEL, regs[1]);
+    cfg->evaluate_axes = FIELD_GET(BMA400_GEN_COMB_SEL, regs[1]);
+    cfg->gen_int_thres = regs[2];
+    cfg->gen_int_dur   = ((uint16_t)regs[3] << 8) | regs[4];
+    cfg->int_thres_ref_x = ((uint16_t)(regs[6] & 0x0F) << 8) | regs[5];
+    cfg->int_thres_ref_y = ((uint16_t)(regs[8] & 0x0F) << 8) | regs[7];
+    cfg->int_thres_ref_z = ((uint16_t)(regs[10] & 0x0F) << 8) | regs[9];
+
+    uint8_t m1, m2;
+    ret = bma400_read_data(chip, BMA400_ACC_INT1_MAP_REG, sizeof(uint8_t), &m1);
+    if(ret != BMA400_OK) {
+        return ret;
+    }
+    ret = bma400_read_data(chip, BMA400_ACC_INT2_MAP_REG, sizeof(uint8_t), &m2);
+    if(ret != BMA400_OK) {
+        return ret;
+    }
+    bool on1 = IS_BIT_SET(m1, map_bit);
+    bool on2 = IS_BIT_SET(m2, map_bit);
+    if(on1 && on2)      cfg->int_chan = BMA400_MAP_BOTH_INT_PINS;
+    else if(on1)        cfg->int_chan = BMA400_INT_CHANNEL_1;
+    else if(on2)        cfg->int_chan = BMA400_INT_CHANNEL_2;
+    else                cfg->int_chan = BMA400_UNMAP_INT_PIN;
+    return BMA400_OK;
+}
+
 static bma400_error_t get_step_cnt_conf(bma400_dev_t *chip, bma400_step_int_conf_t *cfg) {
     uint8_t reg;
     bma400_error_t ret = bma400_read_data(chip, BMA400_ACC_INT12_MAP_REG, sizeof(uint8_t), &reg);
@@ -242,8 +333,12 @@ bma400_error_t bma400_set_sensor_conf(bma400_dev_t *chip, const bma400_sensor_cf
             case BMA400_SENSOR_STEP_COUNTER:
                 ret = map_step_int_pin(chip, cfgs[i].param.step_cnt.int_chan);
                 break;
+            case BMA400_SENSOR_GEN1:
+                ret = set_gen_int_conf(chip, BMA400_GEN1INT_CONFIG_REG,
+                                       BMA400_GEN1_INT_MAP, &cfgs[i].param.gen_int);
+                break;
             default:
-                /* Other sensor types (tap, act_ch, gen1/gen2, orient) are
+                /* Other sensor types (tap, act_ch, gen2, orient) are
                    not implemented yet. */
                 return BMA400_INVAL;
         }
@@ -266,6 +361,10 @@ bma400_error_t bma400_get_sensor_conf(bma400_dev_t *chip, bma400_sensor_cfg_t *c
                 break;
             case BMA400_SENSOR_STEP_COUNTER:
                 ret = get_step_cnt_conf(chip, &cfgs[i].param.step_cnt);
+                break;
+            case BMA400_SENSOR_GEN1:
+                ret = get_gen_int_conf(chip, BMA400_GEN1INT_CONFIG_REG,
+                                       BMA400_GEN1_INT_MAP, &cfgs[i].param.gen_int);
                 break;
             default:
                 return BMA400_INVAL;
@@ -314,7 +413,7 @@ bma400_error_t bma400_enable_interrupt(bma400_dev_t *chip, const bma400_int_enab
         if(on)  *reg |=  bit;
         else    *reg &= ~bit;
     }
-    return BMA400_OK;
+    return bma400_send_data(chip, BMA400_ACC_INT_CONFIG0_REG, sizeof(cfg), cfg);
 }
 
 bma400_error_t bma400_get_interrupt_status(bma400_dev_t *chip, uint16_t *int_status) {
