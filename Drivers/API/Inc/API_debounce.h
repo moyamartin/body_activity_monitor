@@ -13,7 +13,7 @@
  */
 typedef enum {
 	BUTTON_UP,			///< The button is up after 40mS of rising edge detected
-	BUTTON_FALLING,		///< A falling edge has been detected
+	BUTTON_FALLING, ///< A falling edge has been detected
 	BUTTON_DOWN,		///< delay of 40mS passed and logic level of button is low, FSM passed to BUTTON_DOWN
 	BUTTON_RISING		///< A rising edge has been detected, waiting for delay 40mS and button up so FSM transitions to BUTTON_UP
 } debounceState_t;

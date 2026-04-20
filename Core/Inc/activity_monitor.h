@@ -1,35 +1,37 @@
 /**
-  * @file           : API_debounce.h
+  * @file           : activity_monitor.h
   * @brief          : Header for activity_monitor.c file.
-  *                   This file contains the common defines of the activity monitor FSM.
+  *                   This file contains the common defines of the activity
+  *                   monitor FSM that orchestrates UART, display, IMU and
+  *                   button inputs to track the user's activity.
   */
-#ifndef ACTIIVITY_MONITOR_H_
+#ifndef ACTIVITY_MONITOR_H_
 #define ACTIVITY_MONITOR_H_
 
 /**
- * @brief Enum representation of activityMonitor errors
+ * @brief Error codes reported by the activity monitor module
  */
 typedef enum {
-    AM_OK = 0,
-    AM_UART_INIT_ERROR,
-    AM_UART_WRITE_ERROR,
-    AM_DISPLAY_INIT_ERROR,
-    AM_DISPLAY_WRITE_ERROR,
-    AM_IMU_INIT_ERROR,
-    AM_IMU_CONFIG_ERROR,
-    AM_IMU_READ_ERROR,
+    AM_OK = 0,                  ///< No error
+    AM_UART_INIT_ERROR,         ///< UART peripheral initialization failed
+    AM_UART_WRITE_ERROR,        ///< Writing to UART failed
+    AM_DISPLAY_INIT_ERROR,      ///< LCD1602 display initialization failed
+    AM_DISPLAY_WRITE_ERROR,     ///< Writing to the LCD1602 display failed
+    AM_IMU_INIT_ERROR,          ///< BMA400 IMU initialization failed
+    AM_IMU_CONFIG_ERROR,        ///< BMA400 sensor/interrupt configuration failed
+    AM_IMU_READ_ERROR,          ///< Reading from the BMA400 IMU failed
 } activity_monitor_error_t;
 
 /**
- * @brief Representation of each state of the activity monitor FSM
+ * @brief States of the activity monitor FSM
  */
 typedef enum {
-    STILL,
-    WALKING,
-    RUNNING,
-    FREE_FALL,
-    EMERGENCY,
-    ACTIVITY_ERROR,
+    STILL,                      ///< User is not moving
+    WALKING,                    ///< IMU reports walking activity
+    RUNNING,                    ///< IMU reports running activity
+    FREE_FALL,                  ///< IMU detected a free-fall event
+    EMERGENCY,                  ///< Emergency condition triggered (button or free-fall timeout)
+    ACTIVITY_ERROR,             ///< FSM entered an error state; see last reported error
 } activity_monitor_state_t;
 
 
