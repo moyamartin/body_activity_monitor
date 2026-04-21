@@ -413,7 +413,7 @@ static bma400_error_t get_gen_int_conf(bma400_dev_t *chip, uint8_t base_reg, uin
  * @return BMA400_OK on success, or the underlying error from the bus transfer.
  */
 static bma400_error_t get_step_cnt_conf(bma400_dev_t *chip, bma400_step_int_conf_t *cfg) {
-    if(chip == NULL || cfgs == NULL) {
+    if(chip == NULL || cfg == NULL) {
         return BMA400_INVAL;
     }
     uint8_t reg;
