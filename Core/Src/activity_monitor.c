@@ -1,3 +1,16 @@
+/**
+ * @file    activity_monitor.c
+ * @brief   FSM that orchestrates the BMA400 IMU, the LCD1602 display, the UART
+ *          console and the user button (B1) to classify the user's activity
+ *          (still / walking / running), count steps, detect free-fall events
+ *          and escalate them to an EMERGENCY state if they are not cancelled
+ *          in time.
+ *
+ * The module is driven from the main super-loop via activity_monitor_update().
+ * No interrupts are required: the BMA400 status is polled from the loop and
+ * its internal interrupt flags are kept latched until read.
+ */
+
 #include "API_i2c.h"
 #include "API_uart.h"
 #include "API_debounce.h"
@@ -7,21 +20,22 @@
 #include "lcd1602.h"
 #include "stm32f4xx_hal.h"
 
-#define MIN_EMERGENCY_PRESSED_CNT 5
-#define FREE_FALL_TIMEOUT 30000U         ///< free fall to emergency timeout, 30000ms (30s)
-#define BMA400_I2C_ADDRESS (0x15 << 1)
-#define LCD1602_I2C_ADDRESS (0x27 << 1)
+#define MIN_EMERGENCY_PRESSED_CNT 5      ///< button presses required to leave EMERGENCY
+#define FREE_FALL_TIMEOUT 30000U         ///< free fall -> emergency timeout in ms (30 s)
+
+#define BMA400_I2C_ADDRESS (0x15 << 1)   ///< BMA400 with SDO tied to GND
+#define LCD1602_I2C_ADDRESS (0x27 << 1)  ///< PCF8574 backpack default
 
 extern I2C_HandleTypeDef hi2c1;
 
-static activity_monitor_error_t last_error = AM_OK;
-static activity_monitor_state_t state = STILL;
-static bma400_activity_t imu_activity = BMA400_STILL;
+static activity_monitor_error_t last_error = AM_OK;       ///< Last error (if any) of the FSM
+static activity_monitor_state_t state = STILL;            ///< current state of the FSM
+static bma400_activity_t imu_activity = BMA400_STILL;     ///< last activity reported by the IMU
 static bool initialized = false, must_update_display = false;
-static uint32_t steps = 0;
-static uint16_t imu_int_status;
-static uint8_t emergency_button_pressed_counter = 0;
-static delay_t free_fall_emergency_timer;
+static uint32_t steps = 0;                                ///< cached step count shown on the LCD
+static uint16_t imu_int_status;                           ///< combined INT_STAT0/INT_STAT1 of the BMA400
+static uint8_t emergency_button_pressed_counter = 0;      ///< presses accumulated while in EMERGENCY
+static delay_t free_fall_emergency_timer;                 ///< non-blocking 30 s timer for FREE_FALL -> EMERGENCY
 
 static i2c_port_t display_port = {
     .i2c_handler = &hi2c1,
@@ -30,25 +44,41 @@ static i2c_port_t display_port = {
 
 static i2c_port_t imu_port = {
     .i2c_handler = &hi2c1,
-    .address = BMA400_I2C_ADDRESS, // BMA400 I2C address shifted left for HAL functions
+    .address = BMA400_I2C_ADDRESS,
 };
 
 static bma400_dev_t imu = {
     .intf_ptr = &imu_port,
 };
 
+/**
+ * Sensor-side configuration applied at init.
+ * Three blocks are used:
+ *   - STEP_COUNTER: routes the step interrupt and enables activity classification
+ *   - ACCEL:        output data rate, range, filter
+ *   - GEN1:         generic interrupt 1, used here as the free-fall detector
+ */
 static bma400_sensor_cfg_t imu_settings[3] = {
     { .type = BMA400_SENSOR_STEP_COUNTER },
     { .type = BMA400_SENSOR_ACCEL },
     { .type = BMA400_SENSOR_GEN1 },
 };
 
+/**
+ * Interrupt sources enabled in INT_CONFIG0/INT_CONFIG1.
+ * LATCH_INT keeps every flag set until INT_STAT is read, so the super-loop
+ * can poll at its own pace without losing events.
+ */
 static bma400_int_enable_t imu_int_en[3] = {
     { .type = BMA400_STEP_COUNTER_INT_EN, .conf = 1 },
     { .type = BMA400_LATCH_INT_EN,        .conf = 1 },
     { .type = BMA400_GEN1_INT_EN,         .conf = 1 },
 };
 
+/**
+ * LCD1602 (16x2) behind a PCF8574 I2C backpack.
+ * row_offsets follow the HD44780 DDRAM layout: row 0 starts at 0x00, row 1 at 0x40.
+ */
 static lcd1602_data_t display = {
     .port = &display_port,
     .backlight_on = true,
@@ -59,6 +89,13 @@ static lcd1602_data_t display = {
     .row_offsets = {0x00, 0x40, 0x00, 0x00},
 };
 
+/**
+ * @brief Human-readable name of the current FSM state. Used for both the LCD
+ *        (row 0) and the UART log.
+ *
+ * @return Pointer to a statically allocated string literal describing the
+ *         current value of the module-level @ref state. Never NULL.
+ */
 static const char * state_to_str() {
     switch(state) {
         case STILL:
@@ -78,6 +115,13 @@ static const char * state_to_str() {
     }
 }
 
+/**
+ * @brief Refresh the LCD (state + step count) and mirror the same information
+ *        through UART.
+ *
+ * Any failure reported by the LCD or UART drivers aborts the refresh and moves
+ * the FSM to ACTIVITY_ERROR, recording the cause in @ref last_error.
+ */
 static void update_display(void)
 {
     lcd1602_error_t display_ret = lcd1602_clear(&display);
@@ -128,26 +172,32 @@ activity_monitor_error_t activity_monitor_init(void)
         return AM_DISPLAY_INIT_ERROR;
     }
 
+    /// Verify chip-id, soft-reset and apply the defaults for the INT pins.
     bma400_error_t imu_ret = bma400_init(&imu);
     if(imu_ret != BMA400_OK) {
         uart_send_formatted_string("IMU initialization failed (err %d)\r\n", (uint8_t)imu_ret);
         return AM_IMU_INIT_ERROR;
     }
+    ///< Pull the current sensor configuration to use it as a base and only
+    ///< override the fields we care about.
     imu_ret = bma400_get_sensor_conf(&imu, imu_settings, ARRAY_SIZE(imu_settings));
     if(imu_ret != BMA400_OK) {
         uart_send_formatted_string("IMU get configuration failed (err %d)\r\n", (uint8_t)imu_ret);
         return AM_IMU_CONFIG_ERROR;
     }
+    ///< Route the step-detector interrupt to INT1 (we poll the status register,
+    ///< the physical pin is not wired to the MCU).
     imu_settings[0].param.step_cnt.int_chan = BMA400_INT_CHANNEL_1;
+    /// Accelerometer running from acc_filt1 at 100 Hz, +/-4g.
     imu_settings[1].param.accel.odr = BMA400_ODR_100HZ;
     imu_settings[1].param.accel.range = BMA400_RNG_4G;
     imu_settings[1].param.accel.data_src = BMA400_ACC_FILT1;
-    /* Freefall detection via Gen1 interrupt (see https://community.bosch-sensortec.com/knowledge-base-pg631enp/post/bma400-accelerometer-design-guide-3yEbSHfrXTRME5a).
-     * Triggers when |X|,|Y|,|Z| are all within +/-504 mg for >= 200 ms.
-     * Duration is expressed in acc_filt2 samples (fixed 100 Hz, 10 ms each):
-     *   20 samples * 10 ms = 520 ms   =>  H = 0.5 * g * t^2 ~= 1.33 m.
-     * This filters out walking/running bounces while still catching a real
-     * fall from ~1.3 m. */
+    ///< Freefall detection via Gen1 interrupt (see https://community.bosch-sensortec.com/knowledge-base-pg631enp/post/bma400-accelerometer-design-guide-3yEbSHfrXTRME5a).
+    ///< Triggers when |X|,|Y|,|Z| are all within +/-504 mg for >= 200 ms.
+    ///< Duration is expressed in acc_filt2 samples (fixed 100 Hz, 10 ms each):
+    ///<   20 samples * 10 ms = 520 ms   =>  H = 0.5 * g * t^2 ~= 1.33 m.
+    ///< This filters out walking/running bounces while still catching a real
+    ///< fall from ~1.3 m.
     imu_settings[2].param.gen_int.axes_sel      = BMA400_AXIS_X_EN | BMA400_AXIS_Y_EN | BMA400_AXIS_Z_EN;
     imu_settings[2].param.gen_int.data_src      = 1; // acc_filt2 (fixed 100 Hz)
     imu_settings[2].param.gen_int.ref_update    = BMA400_GEN_ACT_REFU_MANUAL;
@@ -179,17 +229,20 @@ activity_monitor_error_t activity_monitor_init(void)
     delay_init(&free_fall_emergency_timer, FREE_FALL_TIMEOUT);
     uart_send_string("activity monitor initialized. Walk/Run to change its state.\r\n");
     update_display();
-    
+
     return AM_OK;
 }
 
 void activity_monitor_update(void)
 {
+    ///< read_key() returns true exactly once per validated press and
+    ///< clears the internal flag, so it is safe to consume it here.
     bool button_pressed = read_key();
     switch(state) {
         case STILL:
-            /// here's the only state where the step counter can be reset to 0
-            /// if the button is pressed
+            ///< STILL is the only state where the button clears the step
+            ///< counter (in WALKING/RUNNING it would discard valid data, and
+            ///< in FREE_FALL/EMERGENCY the button means "cancel").
             if(button_pressed) {
                 bma400_clear_steps(&imu);
                 steps = 0;
@@ -197,6 +250,7 @@ void activity_monitor_update(void)
                 update_display();
                 break;
             }
+            /// fall through: STILL/WALKING/RUNNING share the same IMU polling */
         case WALKING:
         case RUNNING:
             if(bma400_get_interrupt_status(&imu, &imu_int_status) != BMA400_OK) {
@@ -204,6 +258,9 @@ void activity_monitor_update(void)
                 last_error = AM_IMU_READ_ERROR;
                 break;
             }
+            ///< Gen1 fires on free-fall (|X|,|Y|,|Z| < 504 mg for 200 ms); it
+            ///< takes precedence over the step-counter update to avoid masking
+            ///< the alarm with an in-flight step.
             if(IS_BIT_SET(BMA400_GEN1_INT_STAT, imu_int_status) == true) {
                 state = FREE_FALL;
                 update_display();
@@ -220,10 +277,10 @@ void activity_monitor_update(void)
                 }
                 if(tmp_steps != steps) {
                     steps = tmp_steps;
-                    must_update_display = true; 
+                    must_update_display = true;
                 }
-                /// check if activity changed
                 uart_send_formatted_string("activity detected imu int status 0x%02X\r\n", imu_int_status);
+                ///< Map the IMU-reported activity to the FSM state.
                 if(tmp_activity != imu_activity) {
                     must_update_display = true;
                     imu_activity = tmp_activity;
@@ -238,7 +295,6 @@ void activity_monitor_update(void)
                             state = RUNNING;
                             break;
                         default:
-                            /// unknown state, go to error
                             state = ACTIVITY_ERROR;
                             break;
                     }
@@ -247,12 +303,15 @@ void activity_monitor_update(void)
             }
             break;
         case FREE_FALL:
+            /// A single press cancels the alert and returns to STILL.
             if(button_pressed) {
                 delay_stop(&free_fall_emergency_timer);
                 state = STILL;
                 update_display();
                 uint16_t tmp_int_status;
-                // read interrupt status to clear it before going to STILL
+                ///< Read INT_STAT so the latched Gen1 flag is cleared before
+                ///< the next tick; otherwise we would re-enter FREE_FALL
+                ///< immediately.
                 if(bma400_get_interrupt_status(&imu, &tmp_int_status) != BMA400_OK) {
                     state = ACTIVITY_ERROR;
                     last_error = AM_IMU_READ_ERROR;
@@ -260,6 +319,7 @@ void activity_monitor_update(void)
                 }
                 break;
             }
+            /// No press within FREE_FALL_TIMEOUT (30 s) -> escalate.
             if(true == delay_read(&free_fall_emergency_timer)) {
                 state = EMERGENCY;
                 update_display();
@@ -267,8 +327,9 @@ void activity_monitor_update(void)
             }
             break;
         case EMERGENCY:
-            /// The only way to exit from EMERGENCY state is pressing the button
-            /// more than MIN_EMERGENCY_PRESSED_CNT times
+            ///< EMERGENCY is intentionally hard to exit: at least
+            ///< MIN_EMERGENCY_PRESSED_CNT validated presses are required to
+            ///< avoid accidental cancellations.
             if(button_pressed) {
                 emergency_button_pressed_counter++;
             }
@@ -278,9 +339,9 @@ void activity_monitor_update(void)
             }
             break;
         case ACTIVITY_ERROR:
+            /* Sticky state: only a MCU reset recovers from here. */
             break;
         default:
-            // unknown state
             return;
     }
 }

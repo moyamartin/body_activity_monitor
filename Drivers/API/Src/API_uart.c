@@ -1,3 +1,12 @@
+/**
+ * @file   API_uart.c
+ * @brief  Thin wrapper around the STM32 HAL UART driver used for the
+ *         serial console (USART2, routed through the ST-Link VCP).
+ *
+ * The UART handle is kept module-local so the rest of the application does
+ * not need to know which peripheral is behind the console. All transfers are
+ * blocking; a single static tx_buffer is reused by the formatted print path.
+ */
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -74,6 +83,8 @@ uart_error_t uart_send_formatted_string(const char *fmt, ...)
 	if(written <= 0) {
 		return UART_INVAL;
 	}
+	/* vsnprintf returns the size it WOULD have written; clamp to the buffer
+	 * so an oversized format string does not produce a spurious length. */
 	size_t size = ((size_t)written >= sizeof(tx_buffer))
 					? sizeof(tx_buffer) - 1
 					: (size_t)written;

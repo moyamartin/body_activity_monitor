@@ -1,9 +1,22 @@
+/**
+ * @file   bma400.c
+ * @brief  Portable part of the Bosch BMA400 accelerometer driver.
+ *
+ * This file implements the device-side logic: chip-id probing, soft reset,
+ * power-mode changes, sensor/interrupt configuration, interrupt status
+ * retrieval and step counter readout. It depends on three platform-specific
+ * hooks (declared below) that live in separate port files so the driver can
+ * be moved between MCUs without touching this translation unit.
+ */
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include "bma400.h"
 #include "API_uart.h"
 
+/* Platform hooks, supplied by the interface port (bma400_i2c_port.c,
+ * bma400_delay.c, ...). Kept as extern declarations on purpose: that way the
+ * driver does not need to include any HAL header. */
 extern void bma400_delay_us(uint32_t ms);
 extern bma400_error_t bma400_read_data(const bma400_dev_t *chip, uint8_t reg_addr, size_t size, uint8_t *payload);
 extern bma400_error_t bma400_send_data(const bma400_dev_t *chip, uint8_t reg_addr, size_t size, uint8_t *payload);
@@ -12,6 +25,7 @@ bma400_error_t bma400_chip_id(bma400_dev_t *chip, uint8_t *chip_id) {
     if(chip == NULL || chip_id == NULL) {
         return BMA400_INVAL;
     }
+    /* Fast-path: cached from a previous successful probe. */
     if(chip->chip_id != 0) {
         *chip_id = chip->chip_id;
         return BMA400_OK;
@@ -21,10 +35,12 @@ bma400_error_t bma400_chip_id(bma400_dev_t *chip, uint8_t *chip_id) {
     if(status != BMA400_OK) {
         return status;
     }
+    /* The returned value must match the datasheet constant; a different value
+     * means we are talking to a different sensor on the bus. */
     if(tmp_chip_id != BMA400_CHIP_ID) {
         return BMA400_READ_ERROR;
     }
-    chip->chip_id = tmp_chip_id; // cache the chip ID for future use
+    chip->chip_id = tmp_chip_id;
     *chip_id = tmp_chip_id;
     return BMA400_OK;
 }
@@ -33,7 +49,8 @@ bma400_error_t bma400_send_cmd(bma400_dev_t *chip, uint8_t cmd) {
     if(chip == NULL) {
         return BMA400_INVAL;
     }
-    // verify first if STATUS.cmd_rdy bit is set to one
+    /* The CMD register only accepts a new command when STATUS.cmd_rdy == 1;
+     * writing while the device is still busy would silently drop the command. */
     uint8_t status;
     if(bma400_read_data(chip, BMA400_STATUS_REG, sizeof(uint8_t), &status) != BMA400_OK) {
         return BMA400_READ_ERROR;
@@ -53,6 +70,8 @@ bma400_error_t bma400_soft_reset(bma400_dev_t *chip) {
     }
     uint8_t cmd = BMA400_CMD_SOFT_RESET;
     bma400_error_t res = bma400_send_cmd(chip, cmd);
+    /* The datasheet requires a small settling time before the device accepts
+     * further traffic after a soft reset. */
     if(res == BMA400_OK) {
         bma400_delay_us(BMA400_SOFT_RESET_DELAY);
     }
@@ -74,6 +93,9 @@ bma400_error_t bma400_configure_interrupts(bma400_dev_t *chip) {
     if(chip == NULL) {
         return BMA400_INVAL;
     }
+    /* INT12_IO_CTRL holds the electrical characteristics (level polarity and
+     * driver type) of the two INT pins. Both halves of the register are
+     * written together; unused channels leave their bits at 0. */
     uint8_t int_config = 0;
     if(chip->int1_config != NULL) {
         int_config |= (chip->int1_config->active_high) ? BMA400_INT1_OUTPUT_LVL : 0x00;
@@ -83,18 +105,18 @@ bma400_error_t bma400_configure_interrupts(bma400_dev_t *chip) {
         int_config |= (chip->int2_config->active_high) ? BMA400_INT2_OUTPUT_LVL : 0x00;
         int_config |= (chip->int2_config->open_drain) ? BMA400_INT2_OUTPUT_OD : 0x00;
     }
+    /* Also configure the MCU-side GPIOs (EXTI, pull-ups, etc.) so the two
+     * ends of the line are coherent. */
     bma400_init_interrupt_gpios(chip);
     return bma400_send_data(chip, BMA400_INT12_IO_CTRL_REG, sizeof(uint8_t), &int_config);
 }
 
-
-/* ------------------------------------------------------------------------- */
-/* Power mode                                                                */
-/* ------------------------------------------------------------------------- */
 bma400_error_t bma400_set_power_mode(bma400_dev_t *chip, bma400_power_mode_t mode) {
     if(chip == NULL) {
         return BMA400_INVAL;
     }
+    /* ACC_CONFIG0 also holds filter and OSR fields; read-modify-write so we
+     * only touch POWER_MODE_CONF and preserve the rest. */
     uint8_t reg;
     bma400_error_t ret = bma400_read_data(chip, BMA400_ACC_CONFIG0_REG, sizeof(uint8_t), &reg);
     if(ret != BMA400_OK) {
@@ -104,11 +126,15 @@ bma400_error_t bma400_set_power_mode(bma400_dev_t *chip, bma400_power_mode_t mod
     return bma400_send_data(chip, BMA400_ACC_CONFIG0_REG, sizeof(uint8_t), &reg);
 }
 
-/* ------------------------------------------------------------------------- */
-/* Sensor configuration                                                      */
-/* ------------------------------------------------------------------------- */
-
-/* Route the step-detector interrupt to INT1 / INT2 via ACC_INT12_MAP. */
+/**
+ * @brief Route the step-detector interrupt to INT1, INT2, both or none by
+ *        updating ACC_INT12_MAP. The step mapping is unique in that both
+ *        channels share a single register (unlike the Gen/DRDY mappings).
+ *
+ * @param[in,out] chip BMA400 device descriptor
+ * @param[in]     chan Channel selector (INT1 / INT2 / both / unmapped)
+ * @return BMA400_OK on success, or the underlying error from the bus transfer
+ */
 static bma400_error_t map_step_int_pin(bma400_dev_t *chip, bma400_int_chan_t chan) {
     uint8_t reg;
     bma400_error_t ret = bma400_read_data(chip, BMA400_ACC_INT12_MAP_REG, sizeof(uint8_t), &reg);
@@ -125,7 +151,17 @@ static bma400_error_t map_step_int_pin(bma400_dev_t *chip, bma400_int_chan_t cha
     return bma400_send_data(chip, BMA400_ACC_INT12_MAP_REG, sizeof(uint8_t), &reg);
 }
 
-/* Route the data-ready interrupt for ACCEL to INT1 / INT2 via ACC_INTx_MAP. */
+/**
+ * @brief Route the data-ready (accelerometer) interrupt to INT1, INT2, both or
+ *        none. DRDY has a dedicated bit in each of INT1_MAP and INT2_MAP, so
+ *        the function reads both registers, clears the DRDY bit, and sets it
+ *        according to the requested channel.
+ *
+ * @param[in,out] chip BMA400 device descriptor
+ * @param[in]     chan Channel selector (INT1 / INT2 / both / unmapped)
+ * @return BMA400_OK on success, or the underlying error from any of the bus
+ *         transfers involved.
+ */
 static bma400_error_t map_drdy_int_pin(bma400_dev_t *chip, bma400_int_chan_t chan) {
     uint8_t m1, m2;
     bma400_error_t ret = bma400_read_data(chip, BMA400_ACC_INT1_MAP_REG, sizeof(uint8_t), &m1);
@@ -151,6 +187,19 @@ static bma400_error_t map_drdy_int_pin(bma400_dev_t *chip, bma400_int_chan_t cha
     return bma400_send_data(chip, BMA400_ACC_INT2_MAP_REG, sizeof(uint8_t), &m2);
 }
 
+/**
+ * @brief Apply an accelerometer configuration to ACC_CONFIG0/1/2.
+ *        ACC_CONFIG0 is touched read-modify-write because it also holds
+ *        POWER_MODE_CONF (managed by @ref bma400_set_power_mode). After the
+ *        three config registers are written, the DRDY interrupt is routed to
+ *        the requested pin through @ref map_drdy_int_pin.
+ *
+ * @param[in,out] chip BMA400 device descriptor
+ * @param[in]     cfg  Caller-owned accelerometer configuration (range, ODR,
+ *                     OSR, filter selection, int channel, ...)
+ * @return BMA400_OK on success, or the underlying error from any of the bus
+ *         transfers involved.
+ */
 static bma400_error_t set_accel_conf(bma400_dev_t *chip, const bma400_acc_conf_t *cfg) {
     uint8_t reg0;
     bma400_error_t ret = bma400_read_data(chip, BMA400_ACC_CONFIG0_REG, sizeof(uint8_t), &reg0);
@@ -240,6 +289,19 @@ static bma400_error_t map_gen_int_pin(bma400_dev_t *chip, uint8_t gen_map_bit, b
     return bma400_send_data(chip, BMA400_ACC_INT2_MAP_REG, sizeof(uint8_t), &m2);
 }
 
+/**
+ * @brief Pack a Gen1/Gen2 interrupt configuration into the 11 consecutive
+ *        registers that start at @p base_reg and ship it to the device.
+ *        The reference-axis thresholds (int_thres_ref_x/y/z) are 12-bit values
+ *        split across two registers each (low byte + low nibble of the next).
+ *
+ * @param[in,out] chip     BMA400 device descriptor; required to run the I2C transfer
+ * @param[in]     base_reg First register of the Gen1/Gen2 config block
+ * @param[in]     map_bit  Mask bit used to map the interrupt to INT1/INT2 pins
+ * @param[in]     cfg      Caller-owned configuration to write
+ * @return BMA400_OK on success, or the underlying error from the bus transfer
+ *         or from map_gen_int_pin().
+ */
 static bma400_error_t set_gen_int_conf(bma400_dev_t *chip, uint8_t base_reg, uint8_t map_bit,
                                        const bma400_gen_int_conf_t *cfg) {
     uint8_t regs[11];
@@ -250,8 +312,10 @@ static bma400_error_t set_gen_int_conf(bma400_dev_t *chip, uint8_t base_reg, uin
     regs[1] = FIELD_PREP(BMA400_GEN_CRITERION_SEL, cfg->criterion_sel)
             | FIELD_PREP(BMA400_GEN_COMB_SEL, cfg->evaluate_axes);
     regs[2] = cfg->gen_int_thres;
+    /* gen_int_dur is a 16-bit count of filter samples, big-endian on the wire. */
     regs[3] = (uint8_t)((cfg->gen_int_dur >> 8) & 0xFF);
     regs[4] = (uint8_t)(cfg->gen_int_dur & 0xFF);
+    /* 12-bit reference values: full low byte + low nibble in the high byte. */
     regs[5] = (uint8_t)(cfg->int_thres_ref_x & 0xFF);
     regs[6] = (uint8_t)((cfg->int_thres_ref_x >> 8) & 0x0F);
     regs[7] = (uint8_t)(cfg->int_thres_ref_y & 0xFF);
@@ -265,6 +329,19 @@ static bma400_error_t set_gen_int_conf(bma400_dev_t *chip, uint8_t base_reg, uin
     return map_gen_int_pin(chip, map_bit, cfg->int_chan);
 }
 
+/**
+ * @brief Read back a Gen1/Gen2 interrupt configuration from the 11 consecutive
+ *        registers starting at @p base_reg, and resolve the current INT pin
+ *        mapping by inspecting the corresponding bit in INT1_MAP / INT2_MAP.
+ *
+ * @param[in,out] chip     BMA400 device descriptor
+ * @param[in]     base_reg First register of the Gen1/Gen2 config block
+ * @param[in]     map_bit  Mask bit used to probe the interrupt mapping in
+ *                         INT1_MAP / INT2_MAP
+ * @param[out]    cfg      Caller-owned configuration struct filled on success
+ * @return BMA400_OK on success, BMA400_INVAL if a required pointer is NULL,
+ *         or the underlying error from any of the bus transfers involved.
+ */
 static bma400_error_t get_gen_int_conf(bma400_dev_t *chip, uint8_t base_reg, uint8_t map_bit,
                                        bma400_gen_int_conf_t *cfg) {
     if(chip == NULL || cfg == NULL) {
@@ -305,6 +382,16 @@ static bma400_error_t get_gen_int_conf(bma400_dev_t *chip, uint8_t base_reg, uin
     return BMA400_OK;
 }
 
+/**
+ * @brief Read back the step-counter INT pin mapping from ACC_INT12_MAP.
+ *        The step-counter has no other configuration bits exposed by this
+ *        driver, so only @ref bma400_step_int_conf_t::int_chan is populated.
+ *
+ * @param[in,out] chip BMA400 device descriptor
+ * @param[out]    cfg  Caller-owned configuration struct; only int_chan is
+ *                     updated on success.
+ * @return BMA400_OK on success, or the underlying error from the bus transfer.
+ */
 static bma400_error_t get_step_cnt_conf(bma400_dev_t *chip, bma400_step_int_conf_t *cfg) {
     uint8_t reg;
     bma400_error_t ret = bma400_read_data(chip, BMA400_ACC_INT12_MAP_REG, sizeof(uint8_t), &reg);
@@ -376,10 +463,6 @@ bma400_error_t bma400_get_sensor_conf(bma400_dev_t *chip, bma400_sensor_cfg_t *c
     return BMA400_OK;
 }
 
-/* ------------------------------------------------------------------------- */
-/* Interrupt enable / status                                                 */
-/* ------------------------------------------------------------------------- */
-
 bma400_error_t bma400_enable_interrupt(bma400_dev_t *chip, const bma400_int_enable_t *ints, uint8_t n) {
     if(chip == NULL || ints == NULL || n == 0) {
         return BMA400_INVAL;
@@ -431,10 +514,6 @@ bma400_error_t bma400_get_interrupt_status(bma400_dev_t *chip, uint16_t *int_sta
     return BMA400_OK;
 }
 
-/* ------------------------------------------------------------------------- */
-/* Step counter                                                              */
-/* ------------------------------------------------------------------------- */
-
 bma400_error_t bma400_get_steps_counted(bma400_dev_t *chip, uint32_t *step_count, bma400_activity_t *activity) {
     if(chip == NULL || step_count == NULL || activity == NULL) {
         return BMA400_INVAL;
@@ -450,10 +529,6 @@ bma400_error_t bma400_get_steps_counted(bma400_dev_t *chip, uint32_t *step_count
     *activity = (bma400_activity_t)FIELD_GET(BMA400_STEP_ACTIVITY, regs[3]);
     return BMA400_OK;
 }
-
-/* ------------------------------------------------------------------------- */
-/* Init                                                                      */
-/* ------------------------------------------------------------------------- */
 
 bma400_error_t bma400_init(bma400_dev_t *chip) {
     if(chip == NULL) {

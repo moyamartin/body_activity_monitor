@@ -1,3 +1,22 @@
+/**
+ * @file   bma400_i2c_port.c
+ * @brief  BMA400 interface port for I2C on STM32 HAL.
+ *
+ * This file provides the two platform hooks consumed by the portable BMA400
+ * driver (bma400.c):
+ *   - bma400_send_data(): register write. A particularity of the BMA400 I2C
+ *     interface is that it does NOT auto-increment the register address on
+ *     writes, so multi-byte writes are unrolled into one HAL_I2C_Mem_Write()
+ *     call per byte.
+ *   - bma400_read_data(): register read. Reads DO auto-increment, so a
+ *     single HAL_I2C_Mem_Read() covers an arbitrary-length block.
+ *
+ * The device address (including the R/W bit, i.e. shifted left by 1 for the
+ * STM32 HAL) and the underlying I2C_HandleTypeDef are resolved indirectly
+ * through @ref bma400_dev_t::intf_ptr, which the application sets to an
+ * @ref i2c_port_t instance. This keeps the driver itself free of HAL
+ * includes so it can be dropped into a different MCU by swapping this port.
+ */
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>

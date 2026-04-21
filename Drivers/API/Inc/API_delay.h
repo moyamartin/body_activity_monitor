@@ -7,20 +7,20 @@
 #ifndef API_DELAY_H_
 #define API_DELAY_H_
 
-#include <stdint.h> ///< include standard integer types
-#include <stdbool.h> ///< include standard boolean type
+#include <stdint.h>
+#include <stdbool.h>
 
 
-typedef uint32_t tick_t; ///< alias for tick type
-typedef bool bool_t; ///< alias for boolean type
+typedef uint32_t tick_t;  ///< alias for tick type
+typedef bool bool_t;      ///< alias for boolean type
 
 /**
  * @brief structure that represents a non-blocking delay
  */
 typedef struct {
     tick_t startTime; ///< variable to store the start time of the delay
-    tick_t duration; ///< variable to store the duration of the delay
-    bool_t running; ///< variable to indicate if the delay is currently running
+    tick_t duration;  ///< variable to store the duration of the delay
+    bool_t running;   ///< variable to indicate if the delay is currently running
 } delay_t;
 
 /**

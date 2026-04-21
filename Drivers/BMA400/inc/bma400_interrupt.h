@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+/**
+ * @brief enum representing the interrupt types for a @ref bma400_interrupt_t
+ */
 typedef enum {
     BMA400_DATA_READY_INT_EN,       ///< DRDY Interrupt (renamed to avoid collision with the BMA400_DRDY_INT_EN bit mask)
     BMA400_FIFO_WM_INT_EN,          ///< FIFO watermark interrupt
@@ -19,7 +22,10 @@ typedef enum {
     BMA400_AUTO_WAKEUP_EN,          ///< Auto wakeup interrupt
 } bma400_int_type_t;
 
-
+/**
+ * @brief structure that represents a bma400 interrupt configuration, including
+ * the physical GPIO mapping
+ */
 typedef struct {
     void *port;                     ///< GPIO port (e.g. GPIO_TypeDef * on STM32 HAL)
     uint16_t pin;                   ///< GPIO pin mask (GPIO_PIN_x on STM32 HAL)

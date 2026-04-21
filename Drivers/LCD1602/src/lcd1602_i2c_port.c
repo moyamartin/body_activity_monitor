@@ -1,3 +1,25 @@
+/**
+ * @file   lcd1602_i2c_port.c
+ * @brief  LCD1602 interface port for the PCF8574 I2C backpack on STM32 HAL.
+ *
+ * The PCF8574 is an 8-bit quasi-bidirectional I/O expander wired to the
+ * HD44780 controller as follows (typical backpack layout):
+ *
+ *   P0 = RS, P1 = RW, P2 = EN, P3 = backlight, P4..P7 = D4..D7
+ *
+ * This port implements the two low-level hooks required by the portable
+ * LCD1602 driver (lcd1602.c):
+ *   - lcd1602_send_data(): writes one nibble while driving the EN strobe
+ *     (high-then-low) so the HD44780 latches D7..D4 on the falling edge.
+ *   - lcd1602_read_nibble(): reads the busy flag / address counter by
+ *     tri-stating the data pins (writing 1s), asserting RW=1 and strobing EN
+ *     high during the I2C read transaction.
+ *
+ * Every I2C write emits a single byte through HAL_I2C_Master_Transmit(); the
+ * module-local @ref tx_buffer is reused for all transmissions to keep stack
+ * usage flat. Microsecond delays between EN transitions are honoured via
+ * lcd1602_delay_us() so the HD44780 timing requirements are met.
+ */
 #include <stdint.h>
 #include <stdio.h>
 #include <stm32f4xx_hal.h>
