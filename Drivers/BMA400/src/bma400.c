@@ -136,6 +136,9 @@ bma400_error_t bma400_set_power_mode(bma400_dev_t *chip, bma400_power_mode_t mod
  * @return BMA400_OK on success, or the underlying error from the bus transfer
  */
 static bma400_error_t map_step_int_pin(bma400_dev_t *chip, bma400_int_chan_t chan) {
+    if(chip == NULL) {
+        return BMA400_INVAL;
+    }
     uint8_t reg;
     bma400_error_t ret = bma400_read_data(chip, BMA400_ACC_INT12_MAP_REG, sizeof(uint8_t), &reg);
     if(ret != BMA400_OK) {
@@ -163,6 +166,9 @@ static bma400_error_t map_step_int_pin(bma400_dev_t *chip, bma400_int_chan_t cha
  *         transfers involved.
  */
 static bma400_error_t map_drdy_int_pin(bma400_dev_t *chip, bma400_int_chan_t chan) {
+    if(chip == NULL) {
+        return BMA400_INVAL;
+    }
     uint8_t m1, m2;
     bma400_error_t ret = bma400_read_data(chip, BMA400_ACC_INT1_MAP_REG, sizeof(uint8_t), &m1);
     if(ret != BMA400_OK) {
@@ -201,6 +207,9 @@ static bma400_error_t map_drdy_int_pin(bma400_dev_t *chip, bma400_int_chan_t cha
  *         transfers involved.
  */
 static bma400_error_t set_accel_conf(bma400_dev_t *chip, const bma400_acc_conf_t *cfg) {
+    if(chip == NULL || cfg == NULL) {
+        return BMA400_INVAL;
+    }
     uint8_t reg0;
     bma400_error_t ret = bma400_read_data(chip, BMA400_ACC_CONFIG0_REG, sizeof(uint8_t), &reg0);
     if(ret != BMA400_OK) {
@@ -233,6 +242,9 @@ static bma400_error_t set_accel_conf(bma400_dev_t *chip, const bma400_acc_conf_t
 }
 
 static bma400_error_t get_accel_conf(bma400_dev_t *chip, bma400_acc_conf_t *cfg) {
+    if(chip == NULL || cfg == NULL) {
+        return BMA400_INVAL;
+    }
     uint8_t regs[3];
     bma400_error_t ret = bma400_read_data(chip, BMA400_ACC_CONFIG0_REG, sizeof(regs), regs);
     if(ret != BMA400_OK) {
@@ -265,6 +277,9 @@ static bma400_error_t get_accel_conf(bma400_dev_t *chip, bma400_acc_conf_t *cfg)
 
 /* Route generic interrupt 1 or 2 (selected by @p gen_map_bit) to INT1 / INT2. */
 static bma400_error_t map_gen_int_pin(bma400_dev_t *chip, uint8_t gen_map_bit, bma400_int_chan_t chan) {
+    if(chip == NULL) {
+        return BMA400_INVAL;
+    }
     uint8_t m1, m2;
     bma400_error_t ret = bma400_read_data(chip, BMA400_ACC_INT1_MAP_REG, sizeof(uint8_t), &m1);
     if(ret != BMA400_OK) {
@@ -304,6 +319,9 @@ static bma400_error_t map_gen_int_pin(bma400_dev_t *chip, uint8_t gen_map_bit, b
  */
 static bma400_error_t set_gen_int_conf(bma400_dev_t *chip, uint8_t base_reg, uint8_t map_bit,
                                        const bma400_gen_int_conf_t *cfg) {
+    if(chip == NULL || cfg == NULL) {
+        return BMA400_INVAL;
+    }
     uint8_t regs[11];
     regs[0] = (cfg->axes_sel & (BMA400_AXIS_X_EN | BMA400_AXIS_Y_EN | BMA400_AXIS_Z_EN))
             | FIELD_PREP(BMA400_GEN_DATA_SRC, cfg->data_src)
@@ -393,6 +411,9 @@ static bma400_error_t get_gen_int_conf(bma400_dev_t *chip, uint8_t base_reg, uin
  * @return BMA400_OK on success, or the underlying error from the bus transfer.
  */
 static bma400_error_t get_step_cnt_conf(bma400_dev_t *chip, bma400_step_int_conf_t *cfg) {
+    if(chip == NULL || cfgs == NULL) {
+        return BMA400_INVAL;
+    }
     uint8_t reg;
     bma400_error_t ret = bma400_read_data(chip, BMA400_ACC_INT12_MAP_REG, sizeof(uint8_t), &reg);
     if(ret != BMA400_OK) {

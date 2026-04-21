@@ -235,6 +235,7 @@ activity_monitor_error_t activity_monitor_init(void)
 
 void activity_monitor_update(void)
 {
+    if(initialized == false) { return ;}
     ///< read_key() returns true exactly once per validated press and
     ///< clears the internal flag, so it is safe to consume it here.
     bool button_pressed = read_key();
