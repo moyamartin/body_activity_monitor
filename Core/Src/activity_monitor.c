@@ -129,30 +129,35 @@ static void update_display(void)
         uart_send_string("Failed to clear display\r\n");
         state = ACTIVITY_ERROR;
         last_error = AM_DISPLAY_WRITE_ERROR;
+        return;
     }
     display_ret = lcd1602_set_cursor(&display, 0, 0);
     if(display_ret != LCD1602_OK) {
         uart_send_string("Failed to set cursor on display\r\n");
         state = ACTIVITY_ERROR;
         last_error = AM_DISPLAY_WRITE_ERROR;
+        return;
     }
     display_ret = lcd1602_write_string(&display, state_to_str());
     if(display_ret != LCD1602_OK) {
         uart_send_string("Failed to write to display\r\n");
         state = ACTIVITY_ERROR;
         last_error = AM_DISPLAY_WRITE_ERROR;
+        return;
     }
     display_ret = lcd1602_set_cursor(&display, 0, 1);
     if(display_ret != LCD1602_OK) {
         uart_send_string("Failed to set cursor on display\r\n");
         state = ACTIVITY_ERROR;
         last_error = AM_DISPLAY_WRITE_ERROR;
+        return;
     }
     display_ret = lcd1602_write_fmt_string(&display, "Steps: %ld", steps);
     if(display_ret != LCD1602_OK) {
         uart_send_string("Failed to write to display\r\n");
         state = ACTIVITY_ERROR;
         last_error = AM_DISPLAY_WRITE_ERROR;
+        return;
     }
     uart_error_t uart_ret = uart_send_formatted_string("Status %s \t steps: %ld\r\n", state_to_str(), steps);
     if(uart_ret != UART_OK) {
