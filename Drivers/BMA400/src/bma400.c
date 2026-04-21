@@ -14,9 +14,11 @@
 #include "bma400.h"
 #include "API_uart.h"
 
-/* Platform hooks, supplied by the interface port (bma400_i2c_port.c,
+/**
+ * Platform hooks, supplied by the interface port (bma400_i2c_port.c,
  * bma400_delay.c, ...). Kept as extern declarations on purpose: that way the
- * driver does not need to include any HAL header. */
+ * driver does not need to include any HAL header.
+ */
 extern void bma400_delay_us(uint32_t ms);
 extern bma400_error_t bma400_read_data(const bma400_dev_t *chip, uint8_t reg_addr, size_t size, uint8_t *payload);
 extern bma400_error_t bma400_send_data(const bma400_dev_t *chip, uint8_t reg_addr, size_t size, uint8_t *payload);
@@ -25,7 +27,7 @@ bma400_error_t bma400_chip_id(bma400_dev_t *chip, uint8_t *chip_id) {
     if(chip == NULL || chip_id == NULL) {
         return BMA400_INVAL;
     }
-    /* Fast-path: cached from a previous successful probe. */
+    ///< Fast-path: cached from a previous successful probe.
     if(chip->chip_id != 0) {
         *chip_id = chip->chip_id;
         return BMA400_OK;
@@ -35,8 +37,8 @@ bma400_error_t bma400_chip_id(bma400_dev_t *chip, uint8_t *chip_id) {
     if(status != BMA400_OK) {
         return status;
     }
-    /* The returned value must match the datasheet constant; a different value
-     * means we are talking to a different sensor on the bus. */
+    ///< The returned value must match the datasheet constant; a different value
+    ///< means we are talking to a different sensor on the bus.
     if(tmp_chip_id != BMA400_CHIP_ID) {
         return BMA400_READ_ERROR;
     }
@@ -49,8 +51,8 @@ bma400_error_t bma400_send_cmd(bma400_dev_t *chip, uint8_t cmd) {
     if(chip == NULL) {
         return BMA400_INVAL;
     }
-    /* The CMD register only accepts a new command when STATUS.cmd_rdy == 1;
-     * writing while the device is still busy would silently drop the command. */
+    ///< The CMD register only accepts a new command when STATUS.cmd_rdy == 1;
+    ///< writing while the device is still busy would silently drop the command.
     uint8_t status;
     if(bma400_read_data(chip, BMA400_STATUS_REG, sizeof(uint8_t), &status) != BMA400_OK) {
         return BMA400_READ_ERROR;
@@ -70,8 +72,8 @@ bma400_error_t bma400_soft_reset(bma400_dev_t *chip) {
     }
     uint8_t cmd = BMA400_CMD_SOFT_RESET;
     bma400_error_t res = bma400_send_cmd(chip, cmd);
-    /* The datasheet requires a small settling time before the device accepts
-     * further traffic after a soft reset. */
+    ///< The datasheet requires a small settling time before the device accepts
+    ///< further traffic after a soft reset.
     if(res == BMA400_OK) {
         bma400_delay_us(BMA400_SOFT_RESET_DELAY);
     }
@@ -93,9 +95,9 @@ bma400_error_t bma400_configure_interrupts(bma400_dev_t *chip) {
     if(chip == NULL) {
         return BMA400_INVAL;
     }
-    /* INT12_IO_CTRL holds the electrical characteristics (level polarity and
-     * driver type) of the two INT pins. Both halves of the register are
-     * written together; unused channels leave their bits at 0. */
+    ///< INT12_IO_CTRL holds the electrical characteristics (level polarity and
+    ///< driver type) of the two INT pins. Both halves of the register are
+    ///< written together; unused channels leave their bits at 0.
     uint8_t int_config = 0;
     if(chip->int1_config != NULL) {
         int_config |= (chip->int1_config->active_high) ? BMA400_INT1_OUTPUT_LVL : 0x00;
@@ -105,8 +107,8 @@ bma400_error_t bma400_configure_interrupts(bma400_dev_t *chip) {
         int_config |= (chip->int2_config->active_high) ? BMA400_INT2_OUTPUT_LVL : 0x00;
         int_config |= (chip->int2_config->open_drain) ? BMA400_INT2_OUTPUT_OD : 0x00;
     }
-    /* Also configure the MCU-side GPIOs (EXTI, pull-ups, etc.) so the two
-     * ends of the line are coherent. */
+    ///< Also configure the MCU-side GPIOs (EXTI, pull-ups, etc.) so the two
+    ///< ends of the line are coherent.
     bma400_init_interrupt_gpios(chip);
     return bma400_send_data(chip, BMA400_INT12_IO_CTRL_REG, sizeof(uint8_t), &int_config);
 }
@@ -115,8 +117,8 @@ bma400_error_t bma400_set_power_mode(bma400_dev_t *chip, bma400_power_mode_t mod
     if(chip == NULL) {
         return BMA400_INVAL;
     }
-    /* ACC_CONFIG0 also holds filter and OSR fields; read-modify-write so we
-     * only touch POWER_MODE_CONF and preserve the rest. */
+    ///< ACC_CONFIG0 also holds filter and OSR fields; read-modify-write so we
+    ///< only touch POWER_MODE_CONF and preserve the rest.
     uint8_t reg;
     bma400_error_t ret = bma400_read_data(chip, BMA400_ACC_CONFIG0_REG, sizeof(uint8_t), &reg);
     if(ret != BMA400_OK) {
@@ -529,8 +531,8 @@ bma400_error_t bma400_get_interrupt_status(bma400_dev_t *chip, uint16_t *int_sta
     if(ret != BMA400_OK) {
         return ret;
     }
-    /* Low byte = INT_STAT0, high byte = INT_STAT1 (matches Bosch API shape).
-       INT_STAT2 (ACTCH flags) is not combined here yet. */
+    ///< Low byte = INT_STAT0, high byte = INT_STAT1 (matches Bosch API shape).
+    ///< INT_STAT2 (ACTCH flags) is not combined here yet.
     *int_status = ((uint16_t)regs[1] << 8) | regs[0];
     return BMA400_OK;
 }
