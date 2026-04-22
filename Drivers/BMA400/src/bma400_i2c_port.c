@@ -27,6 +27,13 @@
 #include "API_uart.h"
 
 /**
+ * Maximum payload for a single bma400_send_data() transmission. The longest
+ * register burst currently issued by the driver is 11 bytes (Gen1/Gen2
+ * configuration block), so 16 leaves headroom without wasting stack.
+ */
+#define BMA400_MAX_WRITE_PAYLOAD 16
+
+/**
  * @brief Send data to the BMA400 module via I2C communication.
  *
  * @param[in] chip     Pointer to the BMA400 device descriptor
@@ -39,6 +46,9 @@ bma400_error_t bma400_send_data(const bma400_dev_t *chip, uint8_t reg_addr, size
     if(chip == NULL || chip->intf_ptr == NULL || payload == NULL || size == 0) {
         return BMA400_INVAL;
     }
+    if(size > BMA400_MAX_WRITE_PAYLOAD) {
+        return BMA400_INVAL;
+    }
     i2c_port_t *port = (i2c_port_t *)chip->intf_ptr;
     if(port->i2c_handler == NULL) {
         return BMA400_INVAL;
@@ -46,14 +56,22 @@ bma400_error_t bma400_send_data(const bma400_dev_t *chip, uint8_t reg_addr, size
 
     I2C_HandleTypeDef *i2c_handler = (I2C_HandleTypeDef *)port->i2c_handler;
     /**
-     * BMA400 I2C does not autoincrement reg_addr on writes, so walk through
-     * registers one byte at a time.
+     * BMA400 I2C does not autoincrement reg_addr on writes, so each register
+     * has to carry its own address. Pack the (addr,value) pairs into one
+     * contiguous frame and emit it in a single transmission to avoid
+     * re-addressing the slave on every byte:
+     *
+     *   frame = [reg_addr, payload[0], reg_addr+1, payload[1], ...]
      */
+    uint8_t frame[2 * BMA400_MAX_WRITE_PAYLOAD];
     for(size_t i = 0; i < size; i++) {
-        HAL_StatusTypeDef status = HAL_I2C_Mem_Write(i2c_handler, port->address, reg_addr + i, I2C_MEMADD_SIZE_8BIT, payload + i, 1, HAL_MAX_DELAY);
-        if(status != HAL_OK) {
-            return BMA400_WRITE_ERROR;
-        }
+        frame[2 * i]     = (uint8_t)(reg_addr + i);
+        frame[2 * i + 1] = payload[i];
+    }
+
+    HAL_StatusTypeDef status = HAL_I2C_Master_Transmit(i2c_handler, port->address, frame, (uint16_t)(2 * size), HAL_MAX_DELAY);
+    if(status != HAL_OK) {
+        return BMA400_WRITE_ERROR;
     }
     return BMA400_OK;
 }
