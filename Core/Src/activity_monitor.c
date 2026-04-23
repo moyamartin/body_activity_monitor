@@ -22,6 +22,8 @@
 
 #define MIN_EMERGENCY_PRESSED_CNT 5      ///< button presses required to leave EMERGENCY
 #define FREE_FALL_TIMEOUT 30000U         ///< free fall -> emergency timeout in ms (30 s)
+#define FREE_FALL_ACCELERATION_THRESHOLD_MG 63U ///< free fall detection threshold in units of 8mg (|X|,|Y|,|Z| < 504 mg)
+#define FREE_FALL_DETECTION_DURATION_MS 60U ///< free fall detection duration in units of 10ms (>= 600 ms)
 
 #define BMA400_I2C_ADDRESS (0x15 << 1)   ///< BMA400 with SDO tied to GND
 #define LCD1602_I2C_ADDRESS (0x27 << 1)  ///< PCF8574 backpack default
@@ -198,19 +200,19 @@ activity_monitor_error_t activity_monitor_init(void)
     imu_settings[1].param.accel.range = BMA400_RNG_4G;
     imu_settings[1].param.accel.data_src = BMA400_ACC_FILT1;
     ///< Freefall detection via Gen1 interrupt (see https://community.bosch-sensortec.com/knowledge-base-pg631enp/post/bma400-accelerometer-design-guide-3yEbSHfrXTRME5a).
-    ///< Triggers when |X|,|Y|,|Z| are all within +/-504 mg for >= 200 ms.
+    ///< Triggers when |X|,|Y|,|Z| are all within +/-504 mg for >= 600 ms.
     ///< Duration is expressed in acc_filt2 samples (fixed 100 Hz, 10 ms each):
-    ///<   20 samples * 10 ms = 520 ms   =>  H = 0.5 * g * t^2 ~= 1.33 m.
+    ///<   60 samples * 10 ms = 600 ms   =>  H = 0.5 * 504mg * t^2 ~= 0.882 m.
     ///< This filters out walking/running bounces while still catching a real
     ///< fall from ~1.3 m.
     imu_settings[2].param.gen_int.axes_sel      = BMA400_AXIS_X_EN | BMA400_AXIS_Y_EN | BMA400_AXIS_Z_EN;
-    imu_settings[2].param.gen_int.data_src      = 1; // acc_filt2 (fixed 100 Hz)
+    imu_settings[2].param.gen_int.data_src      = BMA400_ACC_FILT2; // acc_filt2 (fixed 100 Hz)
     imu_settings[2].param.gen_int.ref_update    = BMA400_GEN_ACT_REFU_MANUAL;
     imu_settings[2].param.gen_int.hysteresis    = BMA400_GEN_ACT_HYST_NOT_ACTIVE;
     imu_settings[2].param.gen_int.criterion_sel = 0; // below threshold (inactivity)
     imu_settings[2].param.gen_int.evaluate_axes = 1; // AND: all axes must enter the zone
-    imu_settings[2].param.gen_int.gen_int_thres = 0x3F; // 63 * 8 mg = 504 mg
-    imu_settings[2].param.gen_int.gen_int_dur   = 20;   // 30  * 10 ms = 300 ms (.070 m)
+    imu_settings[2].param.gen_int.gen_int_thres = FREE_FALL_ACCELERATION_THRESHOLD_MG;
+    imu_settings[2].param.gen_int.gen_int_dur   = FREE_FALL_DETECTION_DURATION_MS;
     imu_settings[2].param.gen_int.int_thres_ref_x = 0;
     imu_settings[2].param.gen_int.int_thres_ref_y = 0;
     imu_settings[2].param.gen_int.int_thres_ref_z = 0;
@@ -341,6 +343,15 @@ void activity_monitor_update(void)
             }
             if(emergency_button_pressed_counter >= MIN_EMERGENCY_PRESSED_CNT) {
                 state = STILL;
+                uint16_t tmp_int_status;
+                ///< Read INT_STAT so the latched Gen1 flag is cleared before
+                ///< the next tick; otherwise we would re-enter FREE_FALL
+                ///< immediately.
+                if(bma400_get_interrupt_status(&imu, &tmp_int_status) != BMA400_OK) {
+                    state = ACTIVITY_ERROR;
+                    last_error = AM_IMU_READ_ERROR;
+                    break;
+                }
                 update_display();
             }
             break;
