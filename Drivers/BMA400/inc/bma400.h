@@ -15,35 +15,6 @@
 
 #include "bma400_def.h"
 
-/**
- * @brief Port-level register write; the concrete implementation lives in the
- *        selected interface port (e.g. bma400_i2c_port.c). BMA400 I2C writes
- *        do not auto-increment the register address, so ports walk the
- *        payload one byte at a time.
- *
- * @param[in] chip     BMA400 device descriptor
- * @param[in] reg_addr First register address to write
- * @param[in] size     Number of bytes in @p payload (>= 1)
- * @param[in] payload  Buffer containing the bytes to write
- * @return BMA400_OK on success, BMA400_INVAL on invalid pointer / zero size,
- *         BMA400_WRITE_ERROR if the underlying bus transfer failed.
- */
-bma400_error_t bma400_send_data(const bma400_dev_t *chip, uint8_t reg_addr,
-                                size_t size, uint8_t *payload);
-
-/**
- * @brief Port-level register read; the concrete implementation lives in the
- *        selected interface port. Supports auto-incremented block reads.
- *
- * @param[in]  chip     BMA400 device descriptor
- * @param[in]  reg_addr First register address to read
- * @param[in]  size     Number of bytes to read (>= 1)
- * @param[out] payload  Destination buffer
- * @return BMA400_OK on success, BMA400_INVAL on invalid pointer / zero size,
- *         BMA400_READ_ERROR if the underlying bus transfer failed.
- */
-bma400_error_t bma400_read_data(const bma400_dev_t *chip, uint8_t reg_addr,
-                                size_t size, uint8_t *payload);
 
 /**
  * @brief Read the BMA400 chip-id register and cache it in @p chip on success.
